@@ -9,6 +9,7 @@
     {% if session['isSigned'] %}
         <p>Logged in as: {{ email }}</p>
     {% else %}
+        <h2>Login</h2>
         <form method="POST">
             {{ form.hidden_tag() }}
 
@@ -20,7 +21,7 @@
 
             {{ form.submit(class="btn btn-secondary") }}
 
-            <a href="{{ url_for('register') }}">Register</a>
+            <a href="{{ url_for('register') }}" type="button" class="btn btn-secondary">Register</a>
         </form>
     {% endif %}
 {% endblock %}

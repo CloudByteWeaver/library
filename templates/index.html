@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-    <h1>Hello World!</h1>
+    {% for book in list_of_books %}
+        {{ book.title }} - {{ book.id_author }} - {{ book.main_genre }} - {{ book.description }} <br>
+    {% endfor %}
 {% endblock %}
