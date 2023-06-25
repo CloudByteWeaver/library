@@ -6,14 +6,17 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% endfor %}
-    <form method="POST">
+    <form method="POST" enctype='multipart/form-data'>
         {{ form.hidden_tag() }}
+
+        {{ form.cover.label(class='form-label') }}
+        {{ form.cover(class='form-control') }}<br>
 
         {{ form.title.label(class='form-label') }}
         {{ form.title(class='form-control') }}<br>
 
-        {{ form.id_author.label(class='form-label') }}
-        {{ form.id_author(class='form-control') }}<br>
+        {{ form.author.label(class='form-label') }}
+        {{ form.author(class='form-control') }}<br>
 
         {{ form.publication_year.label(class='form-label') }}
         {{ form.publication_year(class='form-control') }}<br>
@@ -27,3 +30,4 @@
         {{ form.submit(class="btn btn-secondary") }}
     </form>
 {% endblock %}
+{#encrypt='multipart/form-data'#}

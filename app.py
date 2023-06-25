@@ -2,11 +2,14 @@ import os
 import pyrebase
 from datetime import datetime
 from dotenv import load_dotenv
-from flask import Flask, render_template, flash, session, redirect
+from flask import Flask, render_template, flash, session, redirect, request
 from flask_wtf import FlaskForm
-from wtforms import SubmitField, PasswordField, EmailField, StringField, IntegerField, TextAreaField
-from wtforms.validators import DataRequired, Email
+from werkzeug.datastructures import FileStorage
+from werkzeug.utils import secure_filename
+from wtforms import SubmitField, PasswordField, EmailField, StringField, IntegerField, TextAreaField, FileField
+from wtforms.validators import DataRequired, Email, Length
 from flask_sqlalchemy import SQLAlchemy
+
 
 load_dotenv('.env')
 
@@ -18,7 +21,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('SQLALCHEMY_DATABASE_URI')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 # Initialize database
 db = SQLAlchemy(app)
-
 
 firebase_config = {
     "apiKey": os.getenv('API_KEY'),
@@ -33,28 +35,28 @@ firebase_config = {
 
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
-# storage = firebase.storage()
-# user = auth.sign_in_with_email_and_password('konrad.janiszewski.us@gmail.com', 'tajneHaslo123')
+storage = firebase.storage()
 # storage.child('test.txt').download(path='', filename='C:/Users/Konrad/Desktop/Projekty/Test/downloaded.txt', token=user['idToken'])
-# storage.child('test.jpg').put('C:/Users/Konrad/Desktop/Projekty/Test/test.jpg')
 
 
 # Models
 class Book(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    cover_url = db.Column(db.String)
     title = db.Column(db.String, nullable=False)
-    id_author = db.Column(db.Integer, nullable=False)
+    author = db.Column(db.Integer, nullable=False)
     publication_year = db.Column(db.Integer, nullable=False)
     main_genre = db.Column(db.String, nullable=False)
     description = db.Column(db.String, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow())
 
     def __repr__(self):
-        return f'Title: {self.title} - Description: {self.description}'
+        # return f'Title: {self.title} - Description: {self.description}'
+        return f'ID: {self.id} - Title: {self.title}'
 
 
 # class Author(db.Model):
-#     id_author = db.Column(db.Integer, primary_key=True)
+#     author = db.Column(db.Integer, primary_key=True)
 #     first_name = db.Column(db.String(25), nullable=False)
 #     last_name = db.Column(db.String(50), nullable=False)
 #     about = db.Column(db.String, nullable=False)
@@ -72,18 +74,24 @@ class LoginForm(FlaskForm):
 
 class RegisterForm(FlaskForm):
     email = EmailField('Email: ', validators=[DataRequired(), Email()])
-    password = PasswordField('Password: ', validators=[DataRequired()])
+    password = PasswordField('Password: ', validators=[DataRequired(), Length(min=6)])
     repeated_password = PasswordField('Repeat password: ', validators=[DataRequired()])
     submit = SubmitField('Register')
 
 
 class BookForm(FlaskForm):
+    cover = FileField('Cover image (optional)')
     title = StringField('Title', validators=[DataRequired()])
-    id_author = IntegerField('Author', validators=[DataRequired()])
+    author = StringField('Author', validators=[DataRequired()])
     publication_year = IntegerField('Publication year', validators=[DataRequired()])
     main_genre = StringField('Main Genre', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[DataRequired()])
     submit = SubmitField('Add')
+
+    # @staticmethod
+    # def validate_cover(form, field):
+    #     if field.data:
+    #         field.data = re.sub(r'[^a-z0-9_.-]', '_', field.data)
 
 
 @app.route('/')
@@ -108,7 +116,7 @@ def login():
             user = auth.sign_in_with_email_and_password(email, password)
             flash('Signed in successfully')
             alert_type = 'alert-success'
-            session['isSigned'] = True
+            session['logged_in'] = True
             session['user'] = user
         except Exception as e:
             flash('Oops! Please check the email address or password you entered and try again.')
@@ -139,16 +147,14 @@ def register():
         if password != repeated_password:
             flash('Error: The repeated password does not match the original password. Please make sure to enter the '
                   'same password in both fields.')
-            print('różne')
-            print(f'1: {password}')
-            print(f'2: {repeated_password}')
             return redirect('/register')
         else:
             print('takie same')
             try:
                 auth.create_user_with_email_and_password(email, password)
                 flash('Registered successfully')
-                session['isSigned'] = True
+                session['logged_in'] = True
+                session['user'] = auth.sign_in_with_email_and_password(email, password)
             except Exception as e:
                 flash('Please check the password you entered and try again.')
                 print(e)
@@ -168,42 +174,108 @@ def logout():
     return redirect('/')
 
 
+def upload_and_get_file_url(cover: FileStorage) -> str:
+    if cover == '':
+        # Default image in the database
+        img_url = 'https://firebasestorage.googleapis.com/v0/b/paw-1-5a796.appspot.com/o/images' \
+                  '%2Fno_cover_available.png?alt=media&token=50ec64bc-ea6d-4bb5-a2ac-adc457f096be'
+    else:
+        # Get file name and extension
+        file_name, file_ext = os.path.splitext(secure_filename(cover.filename))
+        # Generate unique number, so there is no duplicate images in the database
+        unique_string = str(int(datetime.timestamp(datetime.utcnow())))
+        # Unique file name
+        file = file_name + unique_string + file_ext
+        # Save temporarily for upload
+        cover.save(os.path.join(app.instance_path, file))
+        # Get downloadToken to get url for file in database
+        keys = storage.child(f'images/{file}').put(file=f'instance/{file}', token=session['user']['idToken'])
+        download_token = keys['downloadTokens']
+        # Remove temp file after upload
+        os.remove(f'{app.instance_path}/{file}')
+        # Get url for uploaded image
+        img_url = storage.child(f'images/{file}').get_url(download_token)
+
+    return img_url
+
+
 @app.route('/add_book', methods=['GET', 'POST'])
 def add_book():
+    if not session.get('logged_in'):
+        flash('You need to be logged in to access this feature')
+        return redirect('/')
     form = BookForm()
     if form.validate_on_submit():
-        # book = Book.query.filter_by(email=form.email.data).first()
-        book = Book(title=form.title.data, id_author=form.id_author.data, publication_year=form.publication_year.data,
+        cover = form.cover.data
+        img_url = upload_and_get_file_url(cover)
+
+        book = Book(cover_url=img_url, title=form.title.data, author=form.author.data, publication_year=form.publication_year.data,
                     main_genre=form.main_genre.data, description=form.description.data)
         db.session.add(book)
         db.session.commit()
 
         form.title.data = ''
-        form.id_author.data = None
+        form.author.data = ''
         form.publication_year.data = None
         form.description.data = ''
+        form.main_genre.data = ''
+        form.cover.data = ''
         flash('Book Added Successfully')
 
     return render_template('add_book.html', form=form)
 
 
-@app.route('/books/<id>', methods=['DELETE'])
-def delete_book(id):
-    book = Book.query.get(id)
-    if book is None:
-        return {'error': 'not found'}
-    db.session.delete(book)
-    db.session.commit()
-    return {'message': 'yeeet'}
+@app.route('/books/<book_title>-<id>')
+def show_book(id, book_title):
+    book_title = book_title.replace('-', ' ')
+    # book = Book.query.filter_by(title=book_title).first()
+    book = Book.query.get_or_404(id)
+    return render_template('show_book.html', book=book)
 
 
+@app.route('/books/<book_title>-<id>/edit', methods=['GET', 'POST'])
+def edit_book(id, book_title):
+    book_title = book_title.replace('-', ' ')
+    # book = Book.query.filter_by(title=book_title).first()
+    book = Book.query.get_or_404(id)
+    form = BookForm()
+    if request.method == 'GET':
+        form.description.data = book.description
+    print(f'Before: {book.description}')
+    if form.validate_on_submit():
+        # Get fields data
+        cover = form.cover.data
+        img_url = upload_and_get_file_url(cover)
+        book.cover_url = img_url
+        book.title = form.title.data
+        book.author = form.author.data
+        book.publication_year = form.publication_year.data
+        book.main_genre = form.main_genre.data
+        book.description = form.description.data
+
+        # Update database
+        db.session.add(book)
+        db.session.commit()
+
+        # Clear form fields
+        form.title.data = ''
+        form.author.data = None
+        form.publication_year.data = None
+        form.description.data = ''
+        flash('Book updated')
+        return redirect(f'/books/{book_title}-{id}')
+
+    return render_template('edit_book.html', form=form, book=book)
+
+
+# REST
 @app.route('/books')
 def get_books():
     books = Book.query.all()
 
     output = []
     for book in books:
-        book_data = {'id': book.id, 'title': book.title, 'id_author': book.id_author,
+        book_data = {'id': book.id, 'title': book.title, 'author': book.author,
                      'publication_year': book.publication_year, 'main_genre': book.main_genre,
                      'description': book.description, 'created_at': book.created_at}
 
@@ -215,9 +287,19 @@ def get_books():
 @app.route('/books/<id>')
 def get_book(id):
     book = Book.query.get_or_404(id)
-    return {'id': book.id, 'title': book.title, 'id_author': book.id_author,
+    return {'id': book.id, 'title': book.title, 'author': book.author,
             'publication_year': book.publication_year, 'main_genre': book.main_genre,
             'description': book.description, 'created_at': book.created_at}
+
+
+@app.route('/books/<id>', methods=['DELETE'])
+def delete_book(id):
+    book = Book.query.get(id)
+    if book is None:
+        return {'error': 'not found'}
+    db.session.delete(book)
+    db.session.commit()
+    return {'message': 'yeeet'}
 
 
 # Error handlers

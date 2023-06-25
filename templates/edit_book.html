@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block content %}
+    <div class="container">
+        <form method="POST" enctype='multipart/form-data'>
+            {{ form.hidden_tag() }}
+            <div class="row g-5">
+                <div class="col-md-3">
+                    <img class="w-100" id="cover" src="{{ book.cover_url }}" alt='cover'>
+                    <div class="row">
+                        <p>{{ form.cover(class='form-control') }}</p>
+                    </div>
+                </div>
+                <div class="col">
+                    {{ form.title.label(class='form-label') }}
+                    {{ form.title(class='form-control', value=book.title) }}<br>
+
+                    {{ form.author.label(class='form-label') }}
+                    {{ form.author(class='form-control', value=book.author) }}<br>
+
+                    {{ form.publication_year.label(class='form-label') }}
+                    {{ form.publication_year(class='form-control', value=book.publication_year) }}<br>
+
+                    {{ form.main_genre.label(class='form-label') }}
+                    {{ form.main_genre(class='form-control', value=book.main_genre) }}<br>
+
+                    {{ form.description.label(class='form-label') }}
+                    {{ form.description(class='form-control', rows='10')|safe }}<br>
+
+                     <div class="row">
+                        <div class="col" style="text-align: right;">
+                            {{ form.submit(class="btn btn-secondary", value='Save') }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+{% endblock %}

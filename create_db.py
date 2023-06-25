@@ -18,26 +18,30 @@ if __name__ == "__main__":
             # Create tables
             sql = 'CREATE TABLE `book` (' \
                   '`id` INT AUTO_INCREMENT PRIMARY KEY, ' \
+                  '`cover_url` VARCHAR(255),' \
                   '`title` VARCHAR(255) NOT NULL, ' \
-                  '`id_author` INT NOT NULL, ' \
+                  '`author` VARCHAR(255) NOT NULL, ' \
                   '`publication_year` INT NOT NULL, ' \
                   '`main_genre` VARCHAR(255) NOT NULL,' \
-                  '`description` VARCHAR(255) NOT NULL, ' \
+                  '`description` TEXT NOT NULL, ' \
                   '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP);'
             cursor.execute(sql)
 
             # Insert data
-            sql = "INSERT INTO `book`(`title`, `id_author`, `publication_year`, `main_genre`, `description`) VALUES " \
-                  "('Book 1', 1, 2020, 'Fiction', 'Description of Book 1')," \
-                  "('Book 2', 2, 2015, 'Mystery', 'Description of Book 2')," \
-                  "('Book 3', 3, 2018, 'Science Fiction', 'Description of Book 3')," \
-                  "('Book 4', 4, 2012, 'Fantasy', 'Description of Book 4')," \
-                  "('Book 5', 5, 2017, 'Thriller', 'Description of Book 5')," \
-                  "('Book 6', 1, 2019, 'Romance', 'Description of Book 6')," \
-                  "('Book 7', 3, 2016, 'Historical Fiction', 'Description of Book 7')," \
-                  "('Book 8', 2, 2021, 'Mystery', 'Description of Book 8')," \
-                  "('Book 9', 4, 2014, 'Fantasy', 'Description of Book 9')," \
-                  "('Book 10', 5, 2022, 'Science Fiction', 'Description of Book 10');"
+            default_cover = 'https://firebasestorage.googleapis.com/v0/b/paw-1-5a796.appspot.com/o/images' \
+                            '%2Fno_cover_available.png?alt=media&token=50ec64bc-ea6d-4bb5-a2ac-adc457f096be'
+            sql = "INSERT INTO `book`(`cover_url`, `title`, `author`, `publication_year`, `main_genre`, " \
+                  "`description`) VALUES " \
+                  f"('{default_cover}', 'Book 1', 'Author of Book 1', 2020, 'Fiction', 'Description of Book 1')," \
+                  f"('{default_cover}', 'Book 2', 'Author of Book 2', 2015, 'Mystery', 'Description of Book 2')," \
+                  f"('{default_cover}', 'Book 3', 'Author of Book 3', 2018, 'Science Fiction', 'Description of Book 3')," \
+                  f"('{default_cover}', 'Book 4', 'Author of Book 4', 2012, 'Fantasy', 'Description of Book 4')," \
+                  f"('{default_cover}', 'Book 5', 'Author of Book 5', 2017, 'Thriller', 'Description of Book 5')," \
+                  f"('{default_cover}', 'Book 6', 'Author of Book 6', 2020, 'Romance', 'Description of Book 6')," \
+                  f"('{default_cover}', 'Book 7', 'Author of Book 7', 2003, 'Historical Fiction', 'Description of Book 7')," \
+                  f"('{default_cover}', 'Book 8', 'Author of Book 8', 2021, 'Mystery', 'Description of Book 8')," \
+                  f"('{default_cover}', 'Book 9', 'Author of Book 9', 2014, 'Fantasy', 'Description of Book 9')," \
+                  f"('{default_cover}', 'Book 10', 'Author of Book 10', 2022, 'Science Fiction', 'Description of Book 10');"
             cursor.execute(sql)
 
             # Save changes to the database
