@@ -6,21 +6,22 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% endfor %}
-{#    {% if session['isSigned'] %}#}
-{#        <p>Logged in as: {{ email }}</p>#}
-{#    {% else %}#}
-{#    {% endif %}#}
     <style>
         [class*='col']{
             {#background-color: red;#}
-            border: 1px solid black;
+            {#border: 1px solid black;#}
         }
     </style>
     <div class="container">
         <div class="row g-5">
             <div class="col-md-3">
-{#                <img class="w-100" id="cover" src="{{ url_for('static', filename='images/no_cover_available.png') }}" alt='cover'>#}
                 <img class="w-100" src="{{ book.cover_url }}" alt='cover'>
+                <div class="row top-buffer">
+                    <a href="{{ url_for('download_book_cover', id=book.id, book_title=(book.title).replace(' ', '-')) }}"
+                       type="button" class="btn btn-dark">
+                        Download cover
+                    </a>
+                </div>
             </div>
             <div class="col">
                 <p>Title: {{ book.title }}</p>

@@ -6,11 +6,32 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% endfor %}
-    {% for book in list_of_books %}
-{#        <a href="{{ url_for('show_book', book_title=(book.title).replace(' ', '-')) }}">#}
-{#            {{ book.title }} - {{ book.author }} - {{ book.main_genre }} - {{ book.description }}#}
-        <a href="{{ url_for('show_book', id=book.id, book_title=(book.title).replace(' ', '-')) }}">
-            {{ book.title }} - {{ book.author }} - {{ book.main_genre }} - {{ book.description }}
-        </a> <br>
-    {% endfor %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th scope="col">Cover</th>
+                <th scope="col">Title</th>
+                <th scope="col">Author</th>
+                <th scope="col">Main Genre</th>
+                <th scope="col">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for book in list_of_books %}
+                <tr>
+                    <td>
+                        <img class="w-100" src="{{ book.cover_url }}" alt='cover'>
+                    </td>
+                    <th scope="row">
+                        <a href="{{ url_for('show_book', id=book.id, book_title=(book.title).replace(' ', '-')) }}">
+                            {{ book.title }}
+                        </a>
+                    </th>
+                    <td>{{ book.author }}</td>
+                    <td>{{ book.main_genre }}</td>
+                    <td>{{ book.description }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 {% endblock %}

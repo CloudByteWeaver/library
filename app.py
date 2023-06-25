@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+from urllib.parse import urlparse, unquote
+
 import pyrebase
 from datetime import datetime
 from dotenv import load_dotenv
@@ -9,7 +12,6 @@ from werkzeug.utils import secure_filename
 from wtforms import SubmitField, PasswordField, EmailField, StringField, IntegerField, TextAreaField, FileField
 from wtforms.validators import DataRequired, Email, Length
 from flask_sqlalchemy import SQLAlchemy
-
 
 load_dotenv('.env')
 
@@ -36,7 +38,6 @@ firebase_config = {
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
 storage = firebase.storage()
-# storage.child('test.txt').download(path='', filename='C:/Users/Konrad/Desktop/Projekty/Test/downloaded.txt', token=user['idToken'])
 
 
 # Models
@@ -209,7 +210,8 @@ def add_book():
         cover = form.cover.data
         img_url = upload_and_get_file_url(cover)
 
-        book = Book(cover_url=img_url, title=form.title.data, author=form.author.data, publication_year=form.publication_year.data,
+        book = Book(cover_url=img_url, title=form.title.data, author=form.author.data,
+                    publication_year=form.publication_year.data,
                     main_genre=form.main_genre.data, description=form.description.data)
         db.session.add(book)
         db.session.commit()
@@ -227,10 +229,18 @@ def add_book():
 
 @app.route('/books/<book_title>-<id>')
 def show_book(id, book_title):
-    book_title = book_title.replace('-', ' ')
+    # book_title = book_title.replace('-', ' ')
     # book = Book.query.filter_by(title=book_title).first()
     book = Book.query.get_or_404(id)
     return render_template('show_book.html', book=book)
+
+
+def get_filename_from_url(url: str) -> str:
+    parsed_url = urlparse(url)
+    decoded_path = unquote(parsed_url.path)
+    filename = decoded_path.split('/')[-1]
+
+    return filename
 
 
 @app.route('/books/<book_title>-<id>/edit', methods=['GET', 'POST'])
@@ -241,11 +251,20 @@ def edit_book(id, book_title):
     form = BookForm()
     if request.method == 'GET':
         form.description.data = book.description
-    print(f'Before: {book.description}')
     if form.validate_on_submit():
-        # Get fields data
         cover = form.cover.data
-        img_url = upload_and_get_file_url(cover)
+        if cover.filename != '':
+            url = book.cover_url
+            # Get file name from url
+            filename = get_filename_from_url(url)
+            # Delete file from database
+            storage.delete(f'images/{filename}', session['user']['idToken'])
+            # Get url for new cover
+            img_url = upload_and_get_file_url(cover)
+        else:
+            img_url = book.cover_url
+
+        # Get fields data
         book.cover_url = img_url
         book.title = form.title.data
         book.author = form.author.data
@@ -268,6 +287,26 @@ def edit_book(id, book_title):
     return render_template('edit_book.html', form=form, book=book)
 
 
+@app.route('/books/<book_title>-<id>/download')
+def download_book_cover(id, book_title):
+    if not session.get('logged_in'):
+        flash('You need to be logged in to access this feature')
+        return redirect(f'/books/{book_title}-{id}')
+    # Get book data
+    book = Book.query.get_or_404(id)
+    # Get cover's url
+    url = book.cover_url
+    filename = get_filename_from_url(url)
+    # Path to Downloads folder
+    downloads_path = str(Path.home() / "Downloads")
+    # Download file
+    storage.child(f'images/{filename}').download(path='', filename=f'{downloads_path}/{filename}',
+                                                 token=session['user']['idToken'])
+    flash('Successfully downloaded cover file! Check your Downloads folder.')
+
+    return redirect(f'/books/{book_title}-{id}')
+
+
 # REST
 @app.route('/books')
 def get_books():
@@ -275,7 +314,7 @@ def get_books():
 
     output = []
     for book in books:
-        book_data = {'id': book.id, 'title': book.title, 'author': book.author,
+        book_data = {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
                      'publication_year': book.publication_year, 'main_genre': book.main_genre,
                      'description': book.description, 'created_at': book.created_at}
 
@@ -287,7 +326,7 @@ def get_books():
 @app.route('/books/<id>')
 def get_book(id):
     book = Book.query.get_or_404(id)
-    return {'id': book.id, 'title': book.title, 'author': book.author,
+    return {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
             'publication_year': book.publication_year, 'main_genre': book.main_genre,
             'description': book.description, 'created_at': book.created_at}
 
