@@ -28,8 +28,9 @@ if __name__ == "__main__":
             cursor.execute(sql)
 
             # Insert data
-            default_cover = 'https://firebasestorage.googleapis.com/v0/b/paw-1-5a796.appspot.com/o/images' \
-                            '%2Fno_cover_available.png?alt=media&token=50ec64bc-ea6d-4bb5-a2ac-adc457f096be'
+            # default_cover = 'https://firebasestorage.googleapis.com/v0/b/paw-1-5a796.appspot.com/o/images' \
+            #                 '%2Fno_cover_available.png?alt=media&token=50ec64bc-ea6d-4bb5-a2ac-adc457f096be'
+            default_cover = os.getenv('DEFAULT_COVER_IMG')
             sql = "INSERT INTO `book`(`cover_url`, `title`, `author`, `publication_year`, `main_genre`, " \
                   "`description`) VALUES " \
                   f"('{default_cover}', 'Book 1', 'Author of Book 1', 2020, 'Fiction', 'Description of Book 1')," \

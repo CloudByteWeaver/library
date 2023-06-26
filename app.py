@@ -150,7 +150,6 @@ def register():
                   'same password in both fields.')
             return redirect('/register')
         else:
-            print('takie same')
             try:
                 auth.create_user_with_email_and_password(email, password)
                 flash('Registered successfully')
@@ -178,8 +177,7 @@ def logout():
 def upload_and_get_file_url(cover: FileStorage) -> str:
     if cover == '':
         # Default image in the database
-        img_url = 'https://firebasestorage.googleapis.com/v0/b/paw-1-5a796.appspot.com/o/images' \
-                  '%2Fno_cover_available.png?alt=media&token=50ec64bc-ea6d-4bb5-a2ac-adc457f096be'
+        img_url = os.getenv('DEFAULT_COVER_IMG')
     else:
         # Get file name and extension
         file_name, file_ext = os.path.splitext(secure_filename(cover.filename))
@@ -229,8 +227,6 @@ def add_book():
 
 @app.route('/books/<book_title>-<id>')
 def show_book(id, book_title):
-    # book_title = book_title.replace('-', ' ')
-    # book = Book.query.filter_by(title=book_title).first()
     book = Book.query.get_or_404(id)
     return render_template('show_book.html', book=book)
 
@@ -245,8 +241,6 @@ def get_filename_from_url(url: str) -> str:
 
 @app.route('/books/<book_title>-<id>/edit', methods=['GET', 'POST'])
 def edit_book(id, book_title):
-    book_title = book_title.replace('-', ' ')
-    # book = Book.query.filter_by(title=book_title).first()
     book = Book.query.get_or_404(id)
     form = BookForm()
     if request.method == 'GET':
@@ -330,6 +324,36 @@ def get_book(id):
             'publication_year': book.publication_year, 'main_genre': book.main_genre,
             'description': book.description, 'created_at': book.created_at}
 
+# ?key=<api_key>
+@app.route('/books', methods=['POST'])
+def add_book_():
+    book = Book(cover_url=request.json['cover_url'], title=request.json['title'], author=request.json['author'],
+                publication_year=request.json['publication_year'], main_genre=request.json['main_genre'],
+                description=request.json['description'])
+
+    db.session.add(book)
+    db.session.commit()
+    return {'id': book.id, 'created_at': book.created_at}
+
+
+@app.route('/books/<id>', methods=['PUT'])
+def update_book(id):
+    book = Book.query.get(id)
+    if book is None:
+        return {'error': 'not found'}
+
+    book.cover_url = request.json['cover_url']
+    book.title = request.json['title']
+    book.author = request.json['author']
+    book.publication_year = request.json['publication_year']
+    book.main_genre = request.json['main_genre']
+    book.description = request.json['description']
+
+    db.session.add(book)
+    db.session.commit()
+
+    return {'message': f'book: {book.id} updated'}
+
 
 @app.route('/books/<id>', methods=['DELETE'])
 def delete_book(id):
@@ -338,7 +362,7 @@ def delete_book(id):
         return {'error': 'not found'}
     db.session.delete(book)
     db.session.commit()
-    return {'message': 'yeeet'}
+    return {'message': 'book yeeeted'}
 
 
 # Error handlers

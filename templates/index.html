@@ -19,16 +19,16 @@
         <tbody>
             {% for book in list_of_books %}
                 <tr>
-                    <td>
-                        <img class="w-100" src="{{ book.cover_url }}" alt='cover'>
+                    <td class="w-25 text-center">
+                        <img class="w-75 thumbnail img-fluid" src="{{ book.cover_url }}" alt='cover'>
                     </td>
-                    <th scope="row">
+                    <th scope="row" class="col-2">
                         <a href="{{ url_for('show_book', id=book.id, book_title=(book.title).replace(' ', '-')) }}">
                             {{ book.title }}
                         </a>
                     </th>
-                    <td>{{ book.author }}</td>
-                    <td>{{ book.main_genre }}</td>
+                    <td class="col-2">{{ book.author }}</td>
+                    <td class="col-1">{{ book.main_genre }}</td>
                     <td>{{ book.description }}</td>
                 </tr>
             {% endfor %}
