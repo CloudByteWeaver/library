@@ -6,6 +6,7 @@ import pyrebase
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, render_template, flash, session, redirect, request
+from flask_restx import Api, Namespace, Resource, fields
 from flask_wtf import FlaskForm
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
@@ -99,6 +100,14 @@ class BookForm(FlaskForm):
 def index():
     list_of_books = Book.query.order_by(Book.created_at)
     return render_template('index.html', list_of_books=list_of_books)
+
+
+# Swagger (must be after '/' endpoint, so it won't steal its path)
+api = Api(app, doc='/docs/')
+
+ns = Namespace("books", description="Books desc")
+
+api.add_namespace(ns)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -301,68 +310,86 @@ def download_book_cover(id, book_title):
     return redirect(f'/books/{book_title}-{id}')
 
 
+model_book = api.model('Book', {
+    'title': fields.String(required=True, description='Book title'),
+    'author': fields.String(required=True, description='Auther'),
+    'cover_url': fields.String(description="Link for book's cover"),
+    'publication_year': fields.Integer(required=True, description='Publication year'),
+    'main_genre': fields.String(required=True, description='Main Genre'),
+    'description': fields.String(required=True, description='Description'),
+})
+
+model_error_404 = api.model('Error', {
+    'message': fields.String(description='Book not found')
+})
+
+
 # REST
-@app.route('/books')
-def get_books():
-    books = Book.query.all()
+@ns.route('')
+@ns.response(404, 'Book not found', model=model_error_404)
+class BooksShowAll(Resource):
+    def get(self):
+        books = Book.query.all()
 
-    output = []
-    for book in books:
-        book_data = {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
-                     'publication_year': book.publication_year, 'main_genre': book.main_genre,
-                     'description': book.description, 'created_at': book.created_at}
+        output = []
+        for book in books:
+            book_data = {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
+                         'publication_year': book.publication_year, 'main_genre': book.main_genre,
+                         'description': book.description, 'created_at': book.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 
-        output.append(book_data)
+            output.append(book_data)
 
-    return {'books': output}
+        return {'books': output}
 
+    @ns.doc('todo')
+    @ns.marshal_with(model_book, code=200)
+    @ns.expect(model_book)
+    def post(self):
+        book = Book(cover_url=request.json['cover_url'], title=request.json['title'], author=request.json['author'],
+                    publication_year=request.json['publication_year'], main_genre=request.json['main_genre'],
+                    description=request.json['description'])
 
-@app.route('/books/<id>')
-def get_book(id):
-    book = Book.query.get_or_404(id)
-    return {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
-            'publication_year': book.publication_year, 'main_genre': book.main_genre,
-            'description': book.description, 'created_at': book.created_at}
-
-# ?key=<api_key>
-@app.route('/books', methods=['POST'])
-def add_book_():
-    book = Book(cover_url=request.json['cover_url'], title=request.json['title'], author=request.json['author'],
-                publication_year=request.json['publication_year'], main_genre=request.json['main_genre'],
-                description=request.json['description'])
-
-    db.session.add(book)
-    db.session.commit()
-    return {'id': book.id, 'created_at': book.created_at}
+        db.session.add(book)
+        db.session.commit()
+        return {'id': book.id, 'created_at': book.created_at}
 
 
-@app.route('/books/<id>', methods=['PUT'])
-def update_book(id):
-    book = Book.query.get(id)
-    if book is None:
-        return {'error': 'not found'}
+@ns.route('/<id>')
+@ns.response(404, 'Book not found')
+@ns.param('id', 'book id')
+class BookShowOne(Resource):
+    def get(self, id):
+        book = Book.query.get_or_404(id)
+        return {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
+                'publication_year': book.publication_year, 'main_genre': book.main_genre,
+                'description': book.description, 'created_at': book.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 
-    book.cover_url = request.json['cover_url']
-    book.title = request.json['title']
-    book.author = request.json['author']
-    book.publication_year = request.json['publication_year']
-    book.main_genre = request.json['main_genre']
-    book.description = request.json['description']
+    @ns.marshal_with(model_book, code=200)
+    @ns.expect(model_book)
+    def put(self, id):
+        book = Book.query.get_or_404(id)
+        if book is None:
+            return {'error': 'not found'}
 
-    db.session.add(book)
-    db.session.commit()
+        book.cover_url = request.json['cover_url']
+        book.title = request.json['title']
+        book.author = request.json['author']
+        book.publication_year = request.json['publication_year']
+        book.main_genre = request.json['main_genre']
+        book.description = request.json['description']
 
-    return {'message': f'book: {book.id} updated'}
+        db.session.add(book)
+        db.session.commit()
 
+        return {'message': f'book: {book.id} updated'}
 
-@app.route('/books/<id>', methods=['DELETE'])
-def delete_book(id):
-    book = Book.query.get(id)
-    if book is None:
-        return {'error': 'not found'}
-    db.session.delete(book)
-    db.session.commit()
-    return {'message': 'book yeeeted'}
+    def delete(self, id):
+        book = Book.query.get(id)
+        if book is None:
+            return {'error': 'not found'}
+        db.session.delete(book)
+        db.session.commit()
+        return {'message': 'book yeeeted'}
 
 
 # Error handlers
