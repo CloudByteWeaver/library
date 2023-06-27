@@ -1,4 +1,5 @@
 import os
+import secrets
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
@@ -6,7 +7,7 @@ import pyrebase
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, render_template, flash, session, redirect, request
-from flask_restx import Api, Namespace, Resource, fields
+from flask_restx import Api, Namespace, Resource, fields, reqparse
 from flask_wtf import FlaskForm
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
@@ -57,14 +58,12 @@ class Book(db.Model):
         return f'ID: {self.id} - Title: {self.title}'
 
 
-# class Author(db.Model):
-#     author = db.Column(db.Integer, primary_key=True)
-#     first_name = db.Column(db.String(25), nullable=False)
-#     last_name = db.Column(db.String(50), nullable=False)
-#     about = db.Column(db.String, nullable=False)
-#
-#     def __repr__(self):
-#         return '<Last name: %r>' % self.last_name
+class ApiKey(db.Model):
+    id_api = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), nullable=False, unique=True)
+    api_key = db.Column(db.String(64), nullable=False)
+    requests_count = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow())
 
 
 # Forms
@@ -98,8 +97,12 @@ class BookForm(FlaskForm):
 
 @app.route('/')
 def index():
+    if session.get('user'):
+        api_key = ApiKey.query.filter_by(email=session['user']['email']).first().api_key
+    else:
+        api_key = 'Log in to see Your API key.'
     list_of_books = Book.query.order_by(Book.created_at)
-    return render_template('index.html', list_of_books=list_of_books)
+    return render_template('index.html', list_of_books=list_of_books, api_key=api_key)
 
 
 # Swagger (must be after '/' endpoint, so it won't steal its path)
@@ -160,10 +163,17 @@ def register():
             return redirect('/register')
         else:
             try:
+                # Create account
                 auth.create_user_with_email_and_password(email, password)
                 flash('Registered successfully')
+                # Log in to session
                 session['logged_in'] = True
                 session['user'] = auth.sign_in_with_email_and_password(email, password)
+                # Create an API key for user
+                generated_api_key = secrets.token_hex(32)
+                api_key = ApiKey(email=session['user']['email'], api_key=generated_api_key, requests_count=0)
+                db.session.add(api_key)
+                db.session.commit()
             except Exception as e:
                 flash('Please check the password you entered and try again.')
                 print(e)
@@ -324,11 +334,30 @@ model_error_404 = api.model('Error', {
 })
 
 
+def check_api_key(api_key: str):
+    # Check if API key was given
+    if api_key is None:
+        return {'message': 'API key is missing'}
+    # Check if API key is the database
+    key = ApiKey.query.filter_by(api_key=api_key).first()
+    if key is None:
+        return {'message': 'wrong API key'}
+    else:
+        key.requests_count += 1
+        db.session.add(key)
+        db.session.commit()
+
+
 # REST
 @ns.route('')
+@ns.param('api_key', 'Your API key')
 @ns.response(404, 'Book not found', model=model_error_404)
 class BooksShowAll(Resource):
     def get(self):
+        # Validate API key
+        api_key = request.args.get('api_key')
+        check_api_key(api_key)
+
         books = Book.query.all()
 
         output = []
@@ -345,8 +374,15 @@ class BooksShowAll(Resource):
     @ns.marshal_with(model_book, code=200)
     @ns.expect(model_book)
     def post(self):
-        book = Book(cover_url=request.json['cover_url'], title=request.json['title'], author=request.json['author'],
-                    publication_year=request.json['publication_year'], main_genre=request.json['main_genre'],
+        # Validate API key
+        api_key = request.args.get('api_key')
+        check_api_key(api_key)
+
+        book = Book(cover_url=request.json['cover_url'],
+                    title=request.json['title'],
+                    author=request.json['author'],
+                    publication_year=request.json['publication_year'],
+                    main_genre=request.json['main_genre'],
                     description=request.json['description'])
 
         db.session.add(book)
@@ -357,8 +393,13 @@ class BooksShowAll(Resource):
 @ns.route('/<id>')
 @ns.response(404, 'Book not found')
 @ns.param('id', 'book id')
+@ns.param('api_key', 'Your API key')
 class BookShowOne(Resource):
     def get(self, id):
+        # Validate API key
+        api_key = request.args.get('api_key')
+        check_api_key(api_key)
+
         book = Book.query.get_or_404(id)
         return {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
                 'publication_year': book.publication_year, 'main_genre': book.main_genre,
@@ -367,6 +408,10 @@ class BookShowOne(Resource):
     @ns.marshal_with(model_book, code=200)
     @ns.expect(model_book)
     def put(self, id):
+        # Validate API key
+        api_key = request.args.get('api_key')
+        check_api_key(api_key)
+
         book = Book.query.get_or_404(id)
         if book is None:
             return {'error': 'not found'}
@@ -384,6 +429,10 @@ class BookShowOne(Resource):
         return {'message': f'book: {book.id} updated'}
 
     def delete(self, id):
+        # Validate API key
+        api_key = request.args.get('api_key')
+        check_api_key(api_key)
+
         book = Book.query.get(id)
         if book is None:
             return {'error': 'not found'}

@@ -15,6 +15,8 @@ if __name__ == "__main__":
         with connection.cursor() as cursor:
             # sql = "SELECT `id`, `password` FROM `users` WHERE `email`=%s"
             cursor.execute('DROP TABLE IF EXISTS book;')
+            cursor.execute('DROP TABLE IF EXISTS api_key;')
+
             # Create tables
             sql = 'CREATE TABLE `book` (' \
                   '`id` INT AUTO_INCREMENT PRIMARY KEY, ' \
@@ -27,9 +29,15 @@ if __name__ == "__main__":
                   '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP);'
             cursor.execute(sql)
 
+            sql = 'CREATE TABLE `api_key` (' \
+                  '`id_api` INT AUTO_INCREMENT PRIMARY KEY,' \
+                  '`email` VARCHAR(255) NOT NULL UNIQUE ,' \
+                  '`api_key` VARCHAR(64) NOT NULL,' \
+                  '`requests_count` INT,' \
+                  '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP);'
+            cursor.execute(sql)
+
             # Insert data
-            # default_cover = 'https://firebasestorage.googleapis.com/v0/b/paw-1-5a796.appspot.com/o/images' \
-            #                 '%2Fno_cover_available.png?alt=media&token=50ec64bc-ea6d-4bb5-a2ac-adc457f096be'
             default_cover = os.getenv('DEFAULT_COVER_IMG')
             sql = "INSERT INTO `book`(`cover_url`, `title`, `author`, `publication_year`, `main_genre`, " \
                   "`description`) VALUES " \
