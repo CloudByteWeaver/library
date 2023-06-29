@@ -1,14 +1,17 @@
 import os
 import secrets
-import ssl
 from pathlib import Path
+from random import random
+from threading import Lock
+
+from flask_socketio import SocketIO
 from urllib.parse import urlparse, unquote
 
 import pyrebase
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, render_template, flash, session, redirect, request
-from flask_restx import Api, Namespace, Resource, fields, reqparse
+from flask_restx import Api, Namespace, Resource, fields
 from flask_wtf import FlaskForm
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
@@ -42,6 +45,10 @@ firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
 storage = firebase.storage()
 
+socketio = SocketIO(app, cors_allowed_origins='*')
+thread = None
+thread_lock = Lock()
+
 
 # Models
 class Book(db.Model):
@@ -55,7 +62,6 @@ class Book(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow())
 
     def __repr__(self):
-        # return f'Title: {self.title} - Description: {self.description}'
         return f'ID: {self.id} - Title: {self.title}'
 
 
@@ -89,11 +95,6 @@ class BookForm(FlaskForm):
     main_genre = StringField('Main Genre', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[DataRequired()])
     submit = SubmitField('Add')
-
-    # @staticmethod
-    # def validate_cover(form, field):
-    #     if field.data:
-    #         field.data = re.sub(r'[^a-z0-9_.-]', '_', field.data)
 
 
 @app.route('/')
@@ -321,6 +322,43 @@ def download_book_cover(id, book_title):
     return redirect(f'/books/{book_title}-{id}')
 
 
+@app.route('/api_usage')
+def api_usage():
+    return render_template('api_usage.html')
+
+
+# Get current date time
+def get_current_datetime():
+    now = datetime.now()
+    return now.strftime("%m/%d/%Y %H:%M:%S")
+
+
+# Generate random sequence of dummy sensor values and send it to our clients
+def background_thread():
+    print("Generating random sensor values")
+    while True:
+        dummy_sensor_value = round(random() * 100, 3)
+        socketio.emit('updateSensorData', {'value': dummy_sensor_value, "date": get_current_datetime()})
+        socketio.sleep(1)
+
+
+# Decorator for connect
+@socketio.on('connect')
+def connect():
+    print('Client connected')
+
+    global thread
+    with thread_lock:
+        if thread is None:
+            thread = socketio.start_background_task(background_thread)
+
+
+# Decorator for disconnect
+@socketio.on('disconnect')
+def disconnect():
+    print('Client disconnected', request.sid)
+
+
 model_book = api.model('Book', {
     'title': fields.String(required=True, description='Book title'),
     'author': fields.String(required=True, description='Auther'),
@@ -338,15 +376,19 @@ model_error_404 = api.model('Error', {
 def check_api_key(api_key: str):
     # Check if API key was given
     if api_key is None:
+        print('no nie ma')
         return {'message': 'API key is missing'}
     # Check if API key is the database
     key = ApiKey.query.filter_by(api_key=api_key).first()
     if key is None:
+        print('złe api')
         return {'message': 'wrong API key'}
     else:
+        print('jest git')
         key.requests_count += 1
         db.session.add(key)
         db.session.commit()
+        return None
 
 
 # REST
@@ -357,19 +399,21 @@ class BooksShowAll(Resource):
     def get(self):
         # Validate API key
         api_key = request.args.get('api_key')
-        check_api_key(api_key)
+        error_message = check_api_key(api_key)
+        if error_message is None:
+            books = Book.query.all()
 
-        books = Book.query.all()
+            output = []
+            for book in books:
+                book_data = {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
+                             'publication_year': book.publication_year, 'main_genre': book.main_genre,
+                             'description': book.description,
+                             'created_at': book.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 
-        output = []
-        for book in books:
-            book_data = {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
-                         'publication_year': book.publication_year, 'main_genre': book.main_genre,
-                         'description': book.description, 'created_at': book.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+                output.append(book_data)
 
-            output.append(book_data)
-
-        return {'books': output}
+            return {'books': output}
+        return error_message
 
     @ns.doc('todo')
     @ns.marshal_with(model_book, code=200)
@@ -377,18 +421,19 @@ class BooksShowAll(Resource):
     def post(self):
         # Validate API key
         api_key = request.args.get('api_key')
-        check_api_key(api_key)
+        error_message = check_api_key(api_key)
+        if error_message is None:
+            book = Book(cover_url=request.json['cover_url'],
+                        title=request.json['title'],
+                        author=request.json['author'],
+                        publication_year=request.json['publication_year'],
+                        main_genre=request.json['main_genre'],
+                        description=request.json['description'])
 
-        book = Book(cover_url=request.json['cover_url'],
-                    title=request.json['title'],
-                    author=request.json['author'],
-                    publication_year=request.json['publication_year'],
-                    main_genre=request.json['main_genre'],
-                    description=request.json['description'])
-
-        db.session.add(book)
-        db.session.commit()
-        return {'id': book.id, 'created_at': book.created_at}
+            db.session.add(book)
+            db.session.commit()
+            return {'id': book.id, 'created_at': book.created_at}
+        return error_message
 
 
 @ns.route('/<id>')
@@ -399,47 +444,51 @@ class BookShowOne(Resource):
     def get(self, id):
         # Validate API key
         api_key = request.args.get('api_key')
-        check_api_key(api_key)
+        error_message = check_api_key(api_key)
+        if error_message is None:
+            book = Book.query.get_or_404(id)
+            return {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
+                    'publication_year': book.publication_year, 'main_genre': book.main_genre,
+                    'description': book.description, 'created_at': book.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 
-        book = Book.query.get_or_404(id)
-        return {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
-                'publication_year': book.publication_year, 'main_genre': book.main_genre,
-                'description': book.description, 'created_at': book.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+        return error_message
 
     @ns.marshal_with(model_book, code=200)
     @ns.expect(model_book)
     def put(self, id):
         # Validate API key
         api_key = request.args.get('api_key')
-        check_api_key(api_key)
+        error_message = check_api_key(api_key)
+        if error_message is None:
+            book = Book.query.get_or_404(id)
+            if book is None:
+                return {'error': 'not found'}
 
-        book = Book.query.get_or_404(id)
-        if book is None:
-            return {'error': 'not found'}
+            book.cover_url = request.json['cover_url']
+            book.title = request.json['title']
+            book.author = request.json['author']
+            book.publication_year = request.json['publication_year']
+            book.main_genre = request.json['main_genre']
+            book.description = request.json['description']
 
-        book.cover_url = request.json['cover_url']
-        book.title = request.json['title']
-        book.author = request.json['author']
-        book.publication_year = request.json['publication_year']
-        book.main_genre = request.json['main_genre']
-        book.description = request.json['description']
+            db.session.add(book)
+            db.session.commit()
 
-        db.session.add(book)
-        db.session.commit()
-
-        return {'message': f'book: {book.id} updated'}
+            return {'message': f'book: {book.id} updated'}
+        return error_message
 
     def delete(self, id):
         # Validate API key
         api_key = request.args.get('api_key')
-        check_api_key(api_key)
-
-        book = Book.query.get(id)
-        if book is None:
-            return {'error': 'not found'}
-        db.session.delete(book)
-        db.session.commit()
-        return {'message': 'book yeeeted'}
+        error_message = check_api_key(api_key)
+        if error_message is None:
+            book = Book.query.get(id)
+            if book is None:
+                return {'error': 'not found'}
+            db.session.delete(book)
+            db.session.commit()
+            return {'message': 'book yeeeted'}
+        return error_message
 
 
 # Error handlers
@@ -454,4 +503,4 @@ def internal_server_error(e):
 
 
 if __name__ == '__main__':
-    app.run()
+    socketio.run(app)

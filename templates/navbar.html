@@ -17,6 +17,9 @@
             <li class="nav-item">
                 <a class="nav-link" href="/docs/">Docs</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('api_usage') }}">API Usage</a>
+            </li>
         </ul>
         <span class="navbar-text">
                 {% if session['logged_in'] %}
