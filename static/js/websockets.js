@@ -4,11 +4,11 @@ $(document).ready(function () {
   const myChart = new Chart(ctx, {
     type: "line",
     data: {
-      datasets: [{ label: "Temperature",  }],
+      datasets: [{ label: "Requests",  }],
     },
     options: {
       borderWidth: 3,
-      borderColor: ['rgba(255, 99, 132, 1)',],
+      borderColor: ['rgba(250, 121, 33, 1)',],
     },
   });
 
@@ -27,14 +27,14 @@ $(document).ready(function () {
     });
   }
 
-  const MAX_DATA_COUNT = 10;
+  const MAX_DATA_COUNT = 20;
   //connect to the socket server.
   //   var socket = io.connect("https://" + document.domain + ":" + location.port);
   var socket = io.connect();
 
   //receive details from server
   socket.on("updateSensorData", function (msg) {
-    console.log("Received sensorData :: " + msg.date + " :: " + msg.value);
+    // console.log("Received sensorData :: " + msg.date + " :: " + msg.value);
 
     // Show only MAX_DATA_COUNT data
     if (myChart.data.labels.length > MAX_DATA_COUNT) {

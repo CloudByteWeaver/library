@@ -1,7 +1,6 @@
 import os
 import secrets
 from pathlib import Path
-from random import random
 from threading import Lock
 
 from flask_socketio import SocketIO
@@ -48,6 +47,8 @@ storage = firebase.storage()
 socketio = SocketIO(app, cors_allowed_origins='*')
 thread = None
 thread_lock = Lock()
+
+request_counter = 0
 
 
 # Models
@@ -336,9 +337,10 @@ def get_current_datetime():
 # Generate random sequence of dummy sensor values and send it to our clients
 def background_thread():
     print("Generating random sensor values")
+    global request_counter
     while True:
-        dummy_sensor_value = round(random() * 100, 3)
-        socketio.emit('updateSensorData', {'value': dummy_sensor_value, "date": get_current_datetime()})
+        socketio.emit('updateSensorData', {'value': request_counter, "date": get_current_datetime()})
+        request_counter = 0
         socketio.sleep(1)
 
 
@@ -351,12 +353,6 @@ def connect():
     with thread_lock:
         if thread is None:
             thread = socketio.start_background_task(background_thread)
-
-
-# Decorator for disconnect
-@socketio.on('disconnect')
-def disconnect():
-    print('Client disconnected', request.sid)
 
 
 model_book = api.model('Book', {
@@ -376,15 +372,14 @@ model_error_404 = api.model('Error', {
 def check_api_key(api_key: str):
     # Check if API key was given
     if api_key is None:
-        print('no nie ma')
         return {'message': 'API key is missing'}
     # Check if API key is the database
     key = ApiKey.query.filter_by(api_key=api_key).first()
     if key is None:
-        print('złe api')
         return {'message': 'wrong API key'}
     else:
-        print('jest git')
+        global request_counter
+        request_counter += 1
         key.requests_count += 1
         db.session.add(key)
         db.session.commit()
