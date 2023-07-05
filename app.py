@@ -18,6 +18,7 @@ from wtforms import SubmitField, PasswordField, EmailField, StringField, Integer
 from wtforms.validators import DataRequired, Email, Length
 from flask_sqlalchemy import SQLAlchemy
 
+
 load_dotenv('.env')
 
 app = Flask(__name__)
@@ -153,7 +154,7 @@ def register():
     form = RegisterForm()
     # Validate form
     if form.validate_on_submit():
-        email = form.email.data
+        email = form.email.data.lower()
         password = form.password.data
         repeated_password = form.repeated_password.data
         form.email.data = ''
@@ -303,6 +304,15 @@ def edit_book(id, book_title):
     return render_template('edit_book.html', form=form, book=book)
 
 
+@app.route('/delete_book/<id>')
+def delete_book(id):
+    book = Book.query.get(id)
+    db.session.delete(book)
+    db.session.commit()
+    flash('Book deleted')
+    return redirect('/')
+
+
 @app.route('/books/<book_title>-<id>/download')
 def download_book_cover(id, book_title):
     if not session.get('logged_in'):
@@ -368,6 +378,10 @@ model_error_404 = api.model('Error', {
     'message': fields.String(description='Book not found')
 })
 
+model_post_success = api.model('Success', {
+    'message': fields.String(description='Book added'),
+})
+
 
 def check_api_key(api_key: str):
     # Check if API key was given
@@ -411,7 +425,7 @@ class BooksShowAll(Resource):
         return error_message
 
     @ns.doc('todo')
-    @ns.marshal_with(model_book, code=200)
+    @ns.marshal_with(model_post_success, code=200)
     @ns.expect(model_book)
     def post(self):
         # Validate API key
@@ -441,7 +455,9 @@ class BookShowOne(Resource):
         api_key = request.args.get('api_key')
         error_message = check_api_key(api_key)
         if error_message is None:
-            book = Book.query.get_or_404(id)
+            book = Book.query.get(id)
+            if book is None:
+                return {'error': 'not found'}
             return {'id': book.id, 'cover_url': book.cover_url, 'title': book.title, 'author': book.author,
                     'publication_year': book.publication_year, 'main_genre': book.main_genre,
                     'description': book.description, 'created_at': book.created_at.strftime('%Y-%m-%d %H:%M:%S')}
@@ -455,7 +471,7 @@ class BookShowOne(Resource):
         api_key = request.args.get('api_key')
         error_message = check_api_key(api_key)
         if error_message is None:
-            book = Book.query.get_or_404(id)
+            book = Book.query.get(id)
             if book is None:
                 return {'error': 'not found'}
 
